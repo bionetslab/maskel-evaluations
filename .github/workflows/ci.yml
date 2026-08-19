@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    paths-ignore:
+      - '**.md'
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Install Python
+        uses: actions/setup-python@v7.0.0
+        with:
+          python-version: "3.14"
+
+      - name: Ruff check
+        run: uvx ruff check
+
+      - name: Ruff format check
+        run: uvx ruff format --check
+
+  # Tests require the HRF dataset (~107MB, not checked into this repo — see README)
+  # and a published `maskel` release, so they aren't run in CI. Run locally with:
+  #   uv sync --extra dev && pytest -m "not slow"   # fast checks only
+  #   uv sync --extra dev && pytest                 # full suite, needs HRF/ present

@@ -1,0 +1,35 @@
+[project]
+name = "maskel-evaluations"
+version = "0.1.0"
+description = "Benchmarks, real-data regression tests, and analysis notebooks for maskel"
+requires-python = ">=3.13"
+dependencies = [
+    "maskel>=0.1.0,<0.2.0",
+    "itk>=5.4.6",
+    "numpy>=2.4.4",
+    "pillow>=12.2.0",
+    "scipy>=1.17.1",
+    "skan>=0.13.1",
+    "scikit-image>=0.26.0",
+    "tifffile",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=9.0.2",
+    "pooch>=1.9.0",
+]
+notebooks = [
+    "pandas",
+    "matplotlib",
+    "seaborn>=0.13.2",
+    "scikit-learn>=1.8.0",
+    "jupyterlab",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+markers = ["slow: big regression tests (skip with -m 'not slow')"]
