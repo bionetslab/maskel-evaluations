@@ -6,7 +6,7 @@ import numpy as np
 from PIL import Image
 from scipy import ndimage
 
-from ._utils import to_binary
+from maskel._utils import to_binary
 
 
 class HRFDataset:

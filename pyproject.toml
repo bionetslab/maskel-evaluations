@@ -18,6 +18,7 @@ dependencies = [
 dev = [
     "pytest>=9.0.2",
     "pooch>=1.9.0",
+    "nibabel>=5.0.0",  # VesselVio's library/lee94.py imports this at module level
 ]
 notebooks = [
     "pandas",
