@@ -26,6 +26,12 @@ cd "${SLURM_SUBMIT_DIR}"
 export PATH="${HOME}/.local/bin:${PATH}"
 export VESSELVIO_PATH="${VESSELVIO_PATH:-$(cd "${SLURM_SUBMIT_DIR}/.." && pwd)/VesselVio}"
 
+# tinyfat compute nodes have no direct internet egress (unlike the login
+# node) - route through the NHR proxy so benchmark/3d_lung_comparison.py can
+# auto-download its VESSEL12 masks from Zenodo on first run.
+export http_proxy="${http_proxy:-http://proxy.nhr.fau.de:80}"
+export https_proxy="${https_proxy:-http://proxy.nhr.fau.de:80}"
+
 echo "Host: $(hostname)   CPUs: $(nproc)   uv: $(uv --version)"
 echo "VESSELVIO_PATH=${VESSELVIO_PATH}"
 
