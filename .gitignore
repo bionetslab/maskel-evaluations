@@ -216,3 +216,6 @@ tests/lung_masks/
 
 # Notebook-generated intermediate CSV
 analysis/full_features.csv
+
+# SLURM job logs
+slurm/logs/
