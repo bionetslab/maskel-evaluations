@@ -26,6 +26,22 @@ python benchmark/2d_comparison.py
 
 **Mirrors `maskel`'s regression-test pattern, for real data.** `tests/test_2d_thinning_regression.py` and `tests/test_2d_skimage_comparison.py` are the HRF counterparts of the self-contained (brain-volume) regression tests that stayed in the `maskel` repo — same baseline/`--update-baseline` convention, via a local `tests/_helpers.py` (a trimmed copy, not shared across repos).
 
+## Memory benchmarks
+
+`benchmark/{2d,3d,3d_lung}_memory.py` are the peak-RAM counterparts of the timing
+scripts (same datasets, same three-way maskel/skimage/VesselVio comparison), reporting
+peak RSS, mask size, and foreground pixel/voxel count per sample. They write both a
+printed table and a CSV to `results/` (gitignored, regenerable).
+
+**Why they don't reuse the timing scripts' single-process loop.**
+`resource.getrusage(RUSAGE_SELF).ru_maxrss` is a monotonic high-water mark for the
+whole process — it never decreases. Timing all three methods back-to-back in one
+process (as `*_comparison.py` does) would let an earlier, larger-footprint method's
+peak leak into every later method's reported number. `benchmark/_memory_worker.py`
+runs exactly one (sample, method) pair per subprocess invocation, so each method's
+peak RSS is attributable only to that method. The three `*_memory.py` scripts just
+loop over samples and shell out to it once per method.
+
 ## Notebooks
 
 `analysis/HRF_Feature_Analysis.ipynb` and `analysis/HRF_Prediction.ipynb` process all 45 HRF samples through `maskel.pipeline.analyze_binary_image()` and explore/predict phenotype from the resulting features. Both need `HRF/` present and insert the repo root onto `sys.path` in their first cell to import local `hrf.py`.

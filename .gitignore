@@ -219,3 +219,6 @@ analysis/full_features.csv
 
 # SLURM job logs
 slurm/logs/
+
+# Benchmark CSV outputs (regenerable via benchmark/*_memory.py)
+results/
