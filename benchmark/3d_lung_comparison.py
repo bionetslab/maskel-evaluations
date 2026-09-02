@@ -1,7 +1,12 @@
 """3D Lung Benchmark: maskel vs skimage vs VesselVio on VESSEL12 scans.
 
-Preprocessing (fill_holes max_hole_size=100 + 1 closing) done on-the-fly
-before timing, not included in benchmark measurements.
+Runs each method directly on the raw binarized scan, with none of maskel's own
+optional preprocessing (closing/fill_holes) applied first. This benchmark exists to
+compare the three thinning *implementations* against each other; preprocessing is a
+maskel-specific pipeline option, not something skimage/VesselVio have an equivalent
+of, so leaving it out keeps the comparison to exactly what all three methods share.
+An earlier version of this benchmark did apply preprocessing before timing - see git
+history if you need to reproduce that configuration.
 
 Masks are auto-downloaded from Zenodo on first run.
 """
@@ -31,7 +36,6 @@ if not hasattr(skimage.morphology, "skeletonize_3d"):
     # skeletonize (n-dim aware) and removed in modern scikit-image.
     skimage.morphology.skeletonize_3d = skimage.morphology.skeletonize
 from library.lee94 import skeletonize as vesselvio_lee94_thin
-from maskel.pipeline import preprocess_binary
 from maskel.thin import lee94_thin
 
 _HERE = Path(__file__).resolve().parent
@@ -84,7 +88,7 @@ def print_row(name, lee_t, sk_lee_t, vv_t, speedup_sk=None, speedup_vv=None):
 def main():
     print("=" * 95)
     print("  VESSEL12 Lung Benchmark: maskel vs skimage vs VesselVio")
-    print("  Preprocessing: fill_holes (max_hole_size=100) + 1 closing")
+    print("  No preprocessing (raw binarized scan) - thinning implementations only")
     print("=" * 95)
     print()
 
@@ -103,10 +107,7 @@ def main():
         print(f"\n--- {name} ---")
 
         vol = load_scan(mhd_path)
-        binary = (vol > 0).astype(np.uint8)
-        proc = preprocess_binary(
-            binary, closing_iterations=1, fill_holes=True, max_hole_size=100
-        )
+        proc = (vol > 0).astype(np.uint8)
         fg_pct = 100 * proc.mean()
         print(f"  shape={proc.shape}, foreground={fg_pct:.1f}%")
 

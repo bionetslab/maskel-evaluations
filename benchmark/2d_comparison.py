@@ -1,4 +1,10 @@
-"""2D Benchmark: maskel vs skimage vs VesselVio on HRF dataset"""
+"""2D Benchmark: maskel vs skimage vs VesselVio on HRF dataset.
+
+Runs each method directly on the raw manual segmentation (no preprocessing) - see
+module docstring in benchmark/3d_lung_comparison.py for why these benchmarks compare
+the thinning implementations in isolation rather than mixing in maskel's own optional
+preprocessing step.
+"""
 
 import os
 import sys
@@ -9,7 +15,7 @@ import numpy as np
 from skimage.morphology import skeletonize as skimage_thin
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from hrf import HRFDataset, preprocess_segmentation
+from hrf import HRFDataset
 
 VESSELVIO_PATH = os.environ.get("VESSELVIO_PATH")
 if not VESSELVIO_PATH:
@@ -79,8 +85,8 @@ def main():
     lee_times, sk_zhang_times, sk_lee_times, vv_times = [], [], [], []
 
     for i in range(len(ds)):
-        _, seg, mask, info = ds.load_sample(i)
-        cleaned = preprocess_segmentation(seg, mask)
+        _, seg, _mask, info = ds.load_sample(i)
+        cleaned = seg
 
         t0 = time.perf_counter()
         lee94_thin(cleaned)

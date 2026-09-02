@@ -1,8 +1,14 @@
 """2D Memory Benchmark: peak RAM of maskel vs skimage vs VesselVio on HRF dataset.
 
+Runs each method directly on the raw manual segmentation (no preprocessing) - see
+module docstring in benchmark/3d_lung_memory.py for why these benchmarks compare the
+thinning implementations in isolation rather than mixing in maskel's own optional
+preprocessing step.
+
 Each (sample, method) pair runs in benchmark/_memory_worker.py's own subprocess --
 see that file's docstring for why (RUSAGE_SELF.ru_maxrss is a monotonic per-process
-high-water mark, so this can't reuse the timing scripts' single-process loop).
+high-water mark, so this can't reuse the timing scripts' single-process loop) and
+for why the sample is loaded here rather than inside the worker.
 """
 
 import csv
@@ -10,12 +16,13 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from hrf import HRFDataset, preprocess_segmentation
+from hrf import HRFDataset
 
 VESSELVIO_PATH = os.environ.get("VESSELVIO_PATH")
 if not VESSELVIO_PATH:
@@ -32,17 +39,15 @@ METHODS = ["maskel", "sk_zhang", "sk_lee", "vv_lee"]
 METHOD_LABELS = {"maskel": "maskel", "sk_zhang": "sk zhang", "sk_lee": "sk lee", "vv_lee": "vv lee"}
 
 
-def measure(dataset: str, method: str, sample) -> dict:
+def measure(array_path: Path, method: str) -> dict:
     proc = subprocess.run(
         [
             sys.executable,
             str(_WORKER),
-            "--dataset",
-            dataset,
+            "--array-path",
+            str(array_path),
             "--method",
             method,
-            "--sample",
-            str(sample),
         ],
         capture_output=True,
         text=True,
@@ -67,7 +72,7 @@ def main():
     print(header)
     print("-" * len(header))
 
-    with open(csv_path, "w", newline="") as f:
+    with open(csv_path, "w", newline="") as f, tempfile.TemporaryDirectory() as tmp_dir:
         writer = csv.writer(f)
         writer.writerow(
             ["sample", "shape", "mask_bytes", "foreground_px", "foreground_pct"]
@@ -78,13 +83,16 @@ def main():
         )
 
         for i in range(len(ds)):
-            _, seg, mask, info = ds.load_sample(i)
-            cleaned = preprocess_segmentation(seg, mask)
+            _, seg, _mask, info = ds.load_sample(i)
+            cleaned = seg
             fg_px = int(np.count_nonzero(cleaned))
             fg_pct = 100 * fg_px / cleaned.size
             mask_bytes = cleaned.nbytes
 
-            results = {m: measure("hrf", m, i) for m in METHODS}
+            array_path = Path(tmp_dir) / f"{info['name']}.npy"
+            np.save(array_path, cleaned)
+            results = {m: measure(array_path, m) for m in METHODS}
+            array_path.unlink()
 
             row = (
                 f"{info['name']:<10} {str(cleaned.shape):<14} {mask_bytes / 1e6:<9.2f} "

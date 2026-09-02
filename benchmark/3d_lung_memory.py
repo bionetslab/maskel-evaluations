@@ -4,8 +4,19 @@ Masks must already be present in tests/lung_masks/ -- run benchmark/3d_lung_comp
 first if they aren't (it auto-downloads them from Zenodo); this script doesn't fetch
 them itself.
 
+Runs each method directly on the raw binarized scan, with none of maskel's own
+optional preprocessing (closing/fill_holes) applied first. This benchmark exists to
+compare the three thinning *implementations* against each other; preprocessing is a
+maskel-specific pipeline option, not something skimage/VesselVio have an equivalent
+of, so leaving it out keeps the comparison to exactly what all three methods share.
+An earlier version of this benchmark did apply preprocessing before thinning - see
+git history if you need to reproduce that configuration.
+
 Each (scan, method) pair runs in benchmark/_memory_worker.py's own subprocess -- see
-that file's docstring for why.
+that file's docstring for why, and for why the scan is loaded here rather than inside
+the worker (even without preprocessing, itk.imread's own overhead is large enough -
+several hundred MB, per manual RSS instrumentation - to risk swamping a method's own
+delta_mb the same way preprocess_binary used to).
 """
 
 import csv
@@ -13,12 +24,11 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import itk
 import numpy as np
-
-from maskel.pipeline import preprocess_binary
 
 VESSELVIO_PATH = os.environ.get("VESSELVIO_PATH")
 if not VESSELVIO_PATH:
@@ -36,17 +46,15 @@ METHODS = ["maskel", "sk_lee", "vv_lee"]
 METHOD_LABELS = {"maskel": "maskel", "sk_lee": "sk lee", "vv_lee": "vv lee"}
 
 
-def measure(method: str, scan_name: str) -> dict:
+def measure(array_path: Path, method: str) -> dict:
     proc = subprocess.run(
         [
             sys.executable,
             str(_WORKER),
-            "--dataset",
-            "vessel12",
+            "--array-path",
+            str(array_path),
             "--method",
             method,
-            "--sample",
-            scan_name,
         ],
         capture_output=True,
         text=True,
@@ -77,7 +85,7 @@ def main():
     print(header)
     print("-" * len(header))
 
-    with open(csv_path, "w", newline="") as f:
+    with open(csv_path, "w", newline="") as f, tempfile.TemporaryDirectory() as tmp_dir:
         writer = csv.writer(f)
         writer.writerow(
             ["scan", "shape", "mask_bytes", "foreground_px", "foreground_pct"]
@@ -90,15 +98,15 @@ def main():
         for mhd_path in scans:
             name = mhd_path.stem
             vol = np.asarray(itk.imread(str(mhd_path)))
-            binary = (vol > 0).astype(np.uint8)
-            proc = preprocess_binary(
-                binary, closing_iterations=1, fill_holes=True, max_hole_size=100
-            )
+            proc = (vol > 0).astype(np.uint8)
             fg_px = int(np.count_nonzero(proc))
             fg_pct = 100 * fg_px / proc.size
             mask_bytes = proc.nbytes
 
-            results = {m: measure(m, name) for m in METHODS}
+            array_path = Path(tmp_dir) / f"{name}.npy"
+            np.save(array_path, proc)
+            results = {m: measure(array_path, m) for m in METHODS}
+            array_path.unlink()
 
             row = (
                 f"{name:<14} {str(proc.shape):<16} {mask_bytes / 1e6:<9.2f} "
