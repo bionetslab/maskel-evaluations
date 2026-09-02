@@ -16,6 +16,12 @@ if not VESSELVIO_PATH:
         "(https://github.com/JacobBumgarner/VesselVio)."
     )
 sys.path.append(VESSELVIO_PATH)
+import skimage.morphology
+
+if not hasattr(skimage.morphology, "skeletonize_3d"):
+    # VesselVio pins scikit-image==0.18.1; skeletonize_3d was folded into
+    # skeletonize (n-dim aware) and removed in modern scikit-image.
+    skimage.morphology.skeletonize_3d = skimage.morphology.skeletonize
 from library.lee94 import skeletonize as vesselvio_lee94_thin
 from maskel.thin import lee94_thin
 
