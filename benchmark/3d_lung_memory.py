@@ -1,6 +1,6 @@
 """3D Lung Memory Benchmark: peak RAM of maskel vs skimage vs VesselVio on VESSEL12 scans.
 
-Masks must already be present in tests/lung_masks/ -- run benchmark/3d_lung_comparison.py
+Masks must already be present in data/Vessel12/ -- run benchmark/3d_lung_comparison.py
 first if they aren't (it auto-downloads them from Zenodo); this script doesn't fetch
 them itself.
 
@@ -27,8 +27,10 @@ import sys
 import tempfile
 from pathlib import Path
 
-import itk
 import numpy as np
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from vessel12 import Vessel12Dataset
 
 VESSELVIO_PATH = os.environ.get("VESSELVIO_PATH")
 if not VESSELVIO_PATH:
@@ -39,8 +41,8 @@ if not VESSELVIO_PATH:
 
 _HERE = Path(__file__).resolve().parent
 _WORKER = _HERE / "_memory_worker.py"
+_DATA = _HERE.parent / "data" / "Vessel12"
 _RESULTS = _HERE.parent / "results"
-LUNG_DIR = _HERE.parent / "tests" / "lung_masks"
 
 METHODS = ["maskel", "sk_lee", "vv_lee"]
 METHOD_LABELS = {"maskel": "maskel", "sk_lee": "sk lee", "vv_lee": "vv lee"}
@@ -68,18 +70,18 @@ def kb_to_mb(kb: float) -> float:
 
 
 def main():
-    scans = sorted(LUNG_DIR.glob("VESSEL12_*.mhd"))
-    if not scans:
+    if not (_DATA.is_dir() and any(_DATA.glob("VESSEL12_*.mhd"))):
         raise SystemExit(
-            f"No VESSEL12_*.mhd files found in {LUNG_DIR}. Run "
+            f"No VESSEL12_*.mhd files found in {_DATA}. Run "
             "benchmark/3d_lung_comparison.py first to download them."
         )
+    ds = Vessel12Dataset(_DATA)
 
     _RESULTS.mkdir(exist_ok=True)
     csv_path = _RESULTS / "3d_lung_memory.csv"
 
     header = (
-        f"{'Scan':<14} {'shape':<16} {'mask_MB':<9} {'fg_px':<12} {'fg_%':<7} "
+        f"{'Sample':<14} {'shape':<16} {'mask_MB':<9} {'fg_px':<12} {'fg_%':<7} "
         + " ".join(f"{METHOD_LABELS[m] + ' peakMB':<14}" for m in METHODS)
     )
     print(header)
@@ -88,17 +90,15 @@ def main():
     with open(csv_path, "w", newline="") as f, tempfile.TemporaryDirectory() as tmp_dir:
         writer = csv.writer(f)
         writer.writerow(
-            ["scan", "shape", "mask_bytes", "foreground_px", "foreground_pct"]
+            ["sample", "shape", "mask_bytes", "foreground_px", "foreground_pct"]
             + [f"{m}_baseline_mb" for m in METHODS]
             + [f"{m}_peak_mb" for m in METHODS]
             + [f"{m}_delta_mb" for m in METHODS]
             + [f"{m}_wall_time_s" for m in METHODS]
         )
 
-        for mhd_path in scans:
-            name = mhd_path.stem
-            vol = np.asarray(itk.imread(str(mhd_path)))
-            proc = (vol > 0).astype(np.uint8)
+        for proc, info in ds:
+            name = info["name"]
             fg_px = int(np.count_nonzero(proc))
             fg_pct = 100 * fg_px / proc.size
             mask_bytes = proc.nbytes

@@ -1,15 +1,12 @@
-"""Build two supplement LaTeX tables from the completed timing SLURM log and
+"""Build two supplement LaTeX tables from benchmark/*_comparison.py's and
 benchmark/*_memory.py's CSVs: one runtime-only (with speedup vs. maskel), one
 peak-RAM-only.
-
-Runtime is read from the dedicated timing benchmark's log rather than the memory
-benchmark's own (single-shot, no-repeat) wall_time_s column, since the timing
-benchmark actually repeats each measurement (5x per VESSEL12 scan) for robustness.
 
 HRF: mean +/- std across all 45 images (one measurement per image, no repeats).
 VESSEL12: mean +/- std across all 20 scans' per-scan median (over 5 repeats) --
 matches the dataset's true sample size (n=20 scans), rather than treating repeats
-of the same scan as independent samples.
+of the same scan as independent samples. read_runtime_csv() takes the median per
+`sample` group either way, which is a no-op for HRF's single measurement per image.
 
 Speedup is method_time / maskel_time computed per sample, then mean +/- std across
 samples (not a single ratio of the aggregate means) - consistent with how runtime
@@ -20,14 +17,14 @@ construction, not a special case.
 
 import ast
 import csv
-import re
 import statistics
 import sys
 from pathlib import Path
 
 _HERE = Path(__file__).resolve().parent
-TIMING_LOG = _HERE.parent / "slurm" / "logs" / "maskel-benchmark_1498438.out"
-HRF_MEMORY_CSV = _HERE.parent / "results" / "2d_memory.csv"
+HRF_RUNTIME_CSV = _HERE.parent / "results" / "2d_HRF_runtime.csv"
+HRF_MEMORY_CSV = _HERE.parent / "results" / "2d_HRF_memory.csv"
+LUNG_RUNTIME_CSV = _HERE.parent / "results" / "3d_lung_runtime.csv"
 LUNG_MEMORY_CSV = _HERE.parent / "results" / "3d_lung_memory.csv"
 RUNTIME_TEX = _HERE.parent / "results" / "runtime_table.tex"
 MEMORY_TEX = _HERE.parent / "results" / "memory_table.tex"
@@ -41,56 +38,22 @@ METHOD_LABELS = {
     "vv_lee": "VesselVio (lee)",
 }
 
-_HRF_ROW_RE = re.compile(
-    r"^(?P<name>\d{2}_(?:dr|g|h))\s+"
-    r"(?P<maskel>[\d.]+)\s+(?P<sk_zhang>[\d.]+)\s+(?P<sk_lee>[\d.]+)\s+(?P<vv_lee>[\d.]+)\s+"
-    r"[\d.]+\s+[\d.]+\s+[\d.]+\s*$"
-)
-_VESSEL12_HEADER_RE = re.compile(r"^--- (VESSEL12_\d+) ---$")
-_VESSEL12_MEDIAN_RE = re.compile(
-    r"^MEDIAN\s+(?P<maskel>[\d.]+)\s+(?P<sk_lee>[\d.]+)\s+(?P<vv_lee>[\d.]+)\s+[\d.]+\s+[\d.]+\s*$"
-)
 
-
-def parse_hrf_runtime(log_text: str) -> dict[str, list[float]]:
-    start = log_text.index("=== 2D comparison (HRF) ===")
-    end = log_text.index("=== 3D comparison (VESSAP) ===")
-    section = log_text[start:end]
-
-    times = {m: [] for m in HRF_METHODS}
-    for line in section.splitlines():
-        m = _HRF_ROW_RE.match(line)
-        if m:
-            for method in HRF_METHODS:
-                times[method].append(float(m.group(method)))
-
-    if len(times["maskel"]) != 45:
-        raise RuntimeError(f"Expected 45 HRF timing rows, parsed {len(times['maskel'])}")
-    return times
-
-
-def parse_vessel12_runtime(log_text: str) -> dict[str, list[float]]:
-    start = log_text.index("=== 3D lung comparison")
-    end = log_text.index("AGGREGATE (all runs, all scans)")
-    section = log_text[start:end]
-
-    times = {m: [] for m in LUNG_METHODS}
-    current_scan = None
-    seen_scans = set()
-    for line in section.splitlines():
-        header_match = _VESSEL12_HEADER_RE.match(line)
-        if header_match:
-            current_scan = header_match.group(1)
-            continue
-        median_match = _VESSEL12_MEDIAN_RE.match(line)
-        if median_match and current_scan is not None and current_scan not in seen_scans:
-            for method in LUNG_METHODS:
-                times[method].append(float(median_match.group(method)))
-            seen_scans.add(current_scan)
-
-    if len(times["maskel"]) != 20:
-        raise RuntimeError(f"Expected 20 VESSEL12 scan medians, parsed {len(times['maskel'])}")
-    return times
+def read_runtime_csv(path: Path, methods: list[str]) -> dict[str, list[float]]:
+    """Per-sample method runtime, grouped by the CSV's `sample` column and reduced
+    to the median across repeats - a no-op for a dataset with one row per sample
+    (HRF) and a real median-of-5 for one with repeats (VESSEL12's scans)."""
+    grouped: dict[str, dict[str, list[float]]] = {}
+    order: list[str] = []
+    with open(path, newline="") as f:
+        for row in csv.DictReader(f):
+            name = row["sample"]
+            if name not in grouped:
+                grouped[name] = {m: [] for m in methods}
+                order.append(name)
+            for m in methods:
+                grouped[name][m].append(float(row[f"{m}_time_s"]))
+    return {m: [statistics.median(grouped[s][m]) for s in order] for m in methods}
 
 
 def read_memory_csv(path: Path, methods: list[str]) -> dict[str, list[float]]:
@@ -258,12 +221,36 @@ def build_memory_table(hrf_peak, lung_peak) -> str:
 
 
 def main():
-    log_text = TIMING_LOG.read_text()
-    hrf_runtime = parse_hrf_runtime(log_text)
-    lung_runtime = parse_vessel12_runtime(log_text)
+    if not HRF_RUNTIME_CSV.exists():
+        print(
+            f"{HRF_RUNTIME_CSV} not found -- run benchmark/2d_HRF_comparison.py first.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    if not LUNG_RUNTIME_CSV.exists():
+        print(
+            f"{LUNG_RUNTIME_CSV} not found -- run benchmark/3d_lung_comparison.py first.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    hrf_runtime = read_runtime_csv(HRF_RUNTIME_CSV, HRF_METHODS)
+    if len(hrf_runtime["maskel"]) != 45:
+        raise RuntimeError(f"Expected 45 HRF timing rows, found {len(hrf_runtime['maskel'])}")
+    lung_runtime = read_runtime_csv(LUNG_RUNTIME_CSV, LUNG_METHODS)
+    if len(lung_runtime["maskel"]) != 20:
+        raise RuntimeError(
+            f"Expected 20 VESSEL12 scan medians, found {len(lung_runtime['maskel'])}"
+        )
     hrf_speedup = compute_speedups(hrf_runtime, HRF_METHODS)
     lung_speedup = compute_speedups(lung_runtime, LUNG_METHODS)
 
+    if not HRF_MEMORY_CSV.exists() or HRF_MEMORY_CSV.stat().st_size == 0:
+        print(
+            f"{HRF_MEMORY_CSV} is empty -- run benchmark/2d_HRF_memory.py first.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
     hrf_peak, hrf_n = read_memory_csv(HRF_MEMORY_CSV, HRF_METHODS)
     if hrf_n != 45:
         raise RuntimeError(f"Expected 45 HRF memory rows, found {hrf_n}")

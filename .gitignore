@@ -1,0 +1,24 @@
+# Byte-compiled / cache files
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Packaging
+*.egg-info/
+
+# Virtual environment (uv also drops its own .venv/.gitignore, kept here for
+# robustness in case that ever changes)
+.venv/
+
+# Datasets - auto-downloaded into data/HRF and data/Vessel12 on first
+# benchmark run, see benchmark/hrf.py and benchmark/vessel12.py
+/data/
+
+# SLURM job output - machine/job-specific, the .sbatch scripts themselves stay tracked
+/slurm/logs/
+
+# Scratch output written by running the tutorial notebooks - regenerable, not tracked
+/tutorials/full_features.csv
+/tutorials/figures/*
+!/tutorials/figures/.gitkeep

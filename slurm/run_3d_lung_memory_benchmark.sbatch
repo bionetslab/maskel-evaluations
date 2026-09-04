@@ -17,7 +17,7 @@
 # pays fresh import/JIT overhead); adjust if it proves too tight or too generous.
 #
 # Requires beforehand:
-#   - tests/lung_masks/VESSEL12_*.mhd/.raw already present (run
+#   - data/Vessel12/VESSEL12_*.mhd/.raw already present (run
 #     benchmark/3d_lung_comparison.py first if not -- it auto-downloads them from
 #     Zenodo, which needs the proxy exports below on tinyfat compute nodes)
 #   - a VesselVio checkout, path set via VESSELVIO_PATH below or in the env
@@ -38,7 +38,7 @@ export https_proxy="${https_proxy:-http://proxy.nhr.fau.de:80}"
 echo "Host: $(hostname)   CPUs: $(nproc)   uv: $(uv --version)"
 echo "VESSELVIO_PATH=${VESSELVIO_PATH}"
 
-uv sync --extra dev --extra notebooks
+uv sync --extra notebooks
 
 echo "=== 3D lung memory comparison (VESSEL12) ==="
 uv run python benchmark/3d_lung_memory.py

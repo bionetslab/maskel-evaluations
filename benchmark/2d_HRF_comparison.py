@@ -4,8 +4,12 @@ Runs each method directly on the raw manual segmentation (no preprocessing) - se
 module docstring in benchmark/3d_lung_comparison.py for why these benchmarks compare
 the thinning implementations in isolation rather than mixing in maskel's own optional
 preprocessing step.
+
+The HRF manual segmentations are auto-downloaded into data/HRF on first run - see
+benchmark/hrf.py's ensure_hrf(). Writes results/2d_HRF_runtime.csv.
 """
 
+import csv
 import os
 import sys
 import time
@@ -14,8 +18,12 @@ from pathlib import Path
 import numpy as np
 from skimage.morphology import skeletonize as skimage_thin
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from hrf import HRFDataset
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from hrf import HRFDataset, ensure_hrf
+
+_HERE = Path(__file__).resolve().parent
+_DATA = _HERE.parent / "data" / "HRF"
+_RESULTS = _HERE.parent / "results"
 
 VESSELVIO_PATH = os.environ.get("VESSELVIO_PATH")
 if not VESSELVIO_PATH:
@@ -65,7 +73,11 @@ def print_row(
 
 
 def main():
-    ds = HRFDataset("HRF")
+    ensure_hrf(_DATA)
+    ds = HRFDataset(_DATA)
+    _RESULTS.mkdir(exist_ok=True)
+    csv_path = _RESULTS / "2d_HRF_runtime.csv"
+
     print("Warming up numba JIT...")
     warmup()
     print("JIT warmup done.\n")
@@ -84,46 +96,76 @@ def main():
 
     lee_times, sk_zhang_times, sk_lee_times, vv_times = [], [], [], []
 
-    for i in range(len(ds)):
-        _, seg, _mask, info = ds.load_sample(i)
-        cleaned = seg
-
-        t0 = time.perf_counter()
-        lee94_thin(cleaned)
-        lee_t = time.perf_counter() - t0
-
-        t0 = time.perf_counter()
-        skimage_thin(cleaned > 0, method="zhang")
-        sk_zhang_t = time.perf_counter() - t0
-
-        t0 = time.perf_counter()
-        skimage_thin(cleaned > 0, method="lee")
-        sk_lee_t = time.perf_counter() - t0
-
-        # VesselVio Lee94 expects 3D uint8 padded by 1 on all sides
-        vv_input = np.ascontiguousarray(np.pad(cleaned[np.newaxis, ...], 1).copy())
-        t0 = time.perf_counter()
-        vesselvio_lee94_thin(vv_input)
-        vv_t = time.perf_counter() - t0
-
-        lee_times.append(lee_t)
-        sk_zhang_times.append(sk_zhang_t)
-        sk_lee_times.append(sk_lee_t)
-        vv_times.append(vv_t)
-
-        speedup_zhang = sk_zhang_t / lee_t if lee_t > 0 else float("inf")
-        speedup_lee = sk_lee_t / lee_t if lee_t > 0 else float("inf")
-        speedup_vv = vv_t / lee_t if lee_t > 0 else float("inf")
-        print_row(
-            info["name"],
-            lee_t,
-            sk_zhang_t,
-            sk_lee_t,
-            vv_t,
-            speedup_zhang,
-            speedup_lee,
-            speedup_vv,
+    with open(csv_path, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(
+            [
+                "sample",
+                "shape",
+                "foreground_px",
+                "foreground_pct",
+                "maskel_time_s",
+                "sk_zhang_time_s",
+                "sk_lee_time_s",
+                "vv_lee_time_s",
+            ]
         )
+
+        for i in range(len(ds)):
+            _, seg, _mask, info = ds.load_sample(i)
+            cleaned = seg
+            fg_px = int(np.count_nonzero(cleaned))
+            fg_pct = 100 * fg_px / cleaned.size
+
+            t0 = time.perf_counter()
+            lee94_thin(cleaned)
+            lee_t = time.perf_counter() - t0
+
+            t0 = time.perf_counter()
+            skimage_thin(cleaned > 0, method="zhang")
+            sk_zhang_t = time.perf_counter() - t0
+
+            t0 = time.perf_counter()
+            skimage_thin(cleaned > 0, method="lee")
+            sk_lee_t = time.perf_counter() - t0
+
+            # VesselVio Lee94 expects 3D uint8 padded by 1 on all sides
+            vv_input = np.ascontiguousarray(np.pad(cleaned[np.newaxis, ...], 1).copy())
+            t0 = time.perf_counter()
+            vesselvio_lee94_thin(vv_input)
+            vv_t = time.perf_counter() - t0
+
+            lee_times.append(lee_t)
+            sk_zhang_times.append(sk_zhang_t)
+            sk_lee_times.append(sk_lee_t)
+            vv_times.append(vv_t)
+
+            writer.writerow(
+                [
+                    info["name"],
+                    cleaned.shape,
+                    fg_px,
+                    round(fg_pct, 3),
+                    round(lee_t, 6),
+                    round(sk_zhang_t, 6),
+                    round(sk_lee_t, 6),
+                    round(vv_t, 6),
+                ]
+            )
+
+            speedup_zhang = sk_zhang_t / lee_t if lee_t > 0 else float("inf")
+            speedup_lee = sk_lee_t / lee_t if lee_t > 0 else float("inf")
+            speedup_vv = vv_t / lee_t if lee_t > 0 else float("inf")
+            print_row(
+                info["name"],
+                lee_t,
+                sk_zhang_t,
+                sk_lee_t,
+                vv_t,
+                speedup_zhang,
+                speedup_lee,
+                speedup_vv,
+            )
 
     print("-" * 90)
 
@@ -156,6 +198,8 @@ def main():
         speedup_lee = slt / lt
         speedup_vv = vvt / lt
         print_row(name, lt, szt, slt, vvt, speedup_zhang, speedup_lee, speedup_vv)
+
+    print(f"\nWrote {csv_path}")
 
 
 if __name__ == "__main__":

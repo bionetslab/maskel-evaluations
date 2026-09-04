@@ -9,6 +9,9 @@ Each (sample, method) pair runs in benchmark/_memory_worker.py's own subprocess 
 see that file's docstring for why (RUSAGE_SELF.ru_maxrss is a monotonic per-process
 high-water mark, so this can't reuse the timing scripts' single-process loop) and
 for why the sample is loaded here rather than inside the worker.
+
+The HRF manual segmentations are auto-downloaded into data/HRF on first run - see
+benchmark/hrf.py's ensure_hrf().
 """
 
 import csv
@@ -21,8 +24,8 @@ from pathlib import Path
 
 import numpy as np
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from hrf import HRFDataset
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from hrf import HRFDataset, ensure_hrf
 
 VESSELVIO_PATH = os.environ.get("VESSELVIO_PATH")
 if not VESSELVIO_PATH:
@@ -33,6 +36,7 @@ if not VESSELVIO_PATH:
 
 _HERE = Path(__file__).resolve().parent
 _WORKER = _HERE / "_memory_worker.py"
+_DATA = _HERE.parent / "data" / "HRF"
 _RESULTS = _HERE.parent / "results"
 
 METHODS = ["maskel", "sk_zhang", "sk_lee", "vv_lee"]
@@ -61,9 +65,10 @@ def kb_to_mb(kb: float) -> float:
 
 
 def main():
-    ds = HRFDataset("HRF")
+    ensure_hrf(_DATA)
+    ds = HRFDataset(_DATA)
     _RESULTS.mkdir(exist_ok=True)
-    csv_path = _RESULTS / "2d_memory.csv"
+    csv_path = _RESULTS / "2d_HRF_memory.csv"
 
     header = (
         f"{'Sample':<10} {'shape':<14} {'mask_MB':<9} {'fg_px':<10} {'fg_%':<7} "

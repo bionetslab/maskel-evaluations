@@ -1,0 +1,19 @@
+\begin{table}[t]
+\centering
+\begin{tabular}{llc}
+\toprule
+Dataset & Method & Peak RAM (MB) \\
+\midrule
+\multirow{4}{*}{HRF ($n=45$)} & maskel & 193.02 $\pm$ 0.23 \\
+ & scikit-image (zhang) & 104.32 $\pm$ 2.29 \\
+ & scikit-image (lee) & 113.06 $\pm$ 0.17 \\
+ & VesselVio (lee) & 265.71 $\pm$ 8.11 \\
+\midrule
+\multirow{3}{*}{VESSEL12 ($n=20$)} & maskel & 639.17 $\pm$ 50.38 \\
+ & scikit-image (lee) & 401.51 $\pm$ 36.21 \\
+ & VesselVio (lee) & 736.82 $\pm$ 122.03 \\
+\bottomrule
+\end{tabular}
+\caption{Peak memory usage (mean $\pm$ std) of \emph{maskel} compared to scikit-image and VesselVio's Lee94 thinning implementations.}
+\label{tab:benchmark-memory}
+\end{table}

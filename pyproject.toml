@@ -1,7 +1,7 @@
 [project]
 name = "maskel-evaluations"
 version = "0.1.0"
-description = "Benchmarks, real-data regression tests, and analysis notebooks for maskel"
+description = "Benchmarks and analysis notebooks for maskel"
 requires-python = ">=3.13"
 dependencies = [
     "maskel>=0.1.0,<0.2.0",
@@ -12,14 +12,10 @@ dependencies = [
     "skan>=0.13.1",
     "scikit-image>=0.26.0",
     "tifffile",
+    "nibabel>=5.0.0",  # VesselVio's library/lee94.py imports this at module level
 ]
 
 [project.optional-dependencies]
-dev = [
-    "pytest>=9.0.2",
-    "pooch>=1.9.0",
-    "nibabel>=5.0.0",  # VesselVio's library/lee94.py imports this at module level
-]
 notebooks = [
     "pandas",
     "matplotlib",
@@ -30,7 +26,3 @@ notebooks = [
 
 [tool.uv]
 package = false
-
-[tool.pytest.ini_options]
-pythonpath = ["."]
-markers = ["slow: big regression tests (skip with -m 'not slow')"]

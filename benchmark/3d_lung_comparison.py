@@ -8,19 +8,21 @@ of, so leaving it out keeps the comparison to exactly what all three methods sha
 An earlier version of this benchmark did apply preprocessing before timing - see git
 history if you need to reproduce that configuration.
 
-Masks are auto-downloaded from Zenodo on first run.
+Masks are auto-downloaded from Zenodo into data/Vessel12 on first run - see
+benchmark/vessel12.py's ensure_vessel12(). Writes results/3d_lung_runtime.csv.
 """
 
+import csv
 import os
 import sys
-import tarfile
 import time
-import urllib.request
 from pathlib import Path
 
-import itk
 import numpy as np
 from skimage.morphology import skeletonize as skimage_thin
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from vessel12 import Vessel12Dataset, ensure_vessel12
 
 VESSELVIO_PATH = os.environ.get("VESSELVIO_PATH")
 if not VESSELVIO_PATH:
@@ -39,29 +41,8 @@ from library.lee94 import skeletonize as vesselvio_lee94_thin
 from maskel.thin import lee94_thin
 
 _HERE = Path(__file__).resolve().parent
-LUNG_DIR = _HERE.parent / "tests" / "lung_masks"
-_MASK_TGZ = LUNG_DIR / "VESSEL12_01-20_Lungmasks.tar.bz2"
-_MASK_URL = (
-    "https://zenodo.org/records/8055066/files/"
-    "VESSEL12_01-20_Lungmasks.tar.bz2?download=1"
-)
-
-
-def ensure_masks():
-    if LUNG_DIR.is_dir() and any(LUNG_DIR.glob("VESSEL12_*.mhd")):
-        return
-    LUNG_DIR.mkdir(parents=True, exist_ok=True)
-    print("Downloading lung masks from Zenodo...")
-    urllib.request.urlretrieve(_MASK_URL, _MASK_TGZ)
-    print("Extracting...")
-    with tarfile.open(_MASK_TGZ, "r:bz2") as tar:
-        tar.extractall(path=LUNG_DIR)
-    _MASK_TGZ.unlink()
-    print("Done.")
-
-
-def load_scan(mhd_path: Path) -> np.ndarray:
-    return np.asarray(itk.imread(str(mhd_path)))
+_DATA = _HERE.parent / "data" / "Vessel12"
+_RESULTS = _HERE.parent / "results"
 
 
 def warmup():
@@ -96,65 +77,95 @@ def main():
     warmup()
     print("JIT warmup done.\n")
 
-    ensure_masks()
-
-    scans = sorted(LUNG_DIR.glob("VESSEL12_*.mhd"))
+    ensure_vessel12(_DATA)
+    ds = Vessel12Dataset(_DATA)
+    _RESULTS.mkdir(exist_ok=True)
+    csv_path = _RESULTS / "3d_lung_runtime.csv"
 
     agg_lee, agg_sk, agg_vv = [], [], []
 
-    for mhd_path in scans:
-        name = mhd_path.stem
-        print(f"\n--- {name} ---")
-
-        vol = load_scan(mhd_path)
-        proc = (vol > 0).astype(np.uint8)
-        fg_pct = 100 * proc.mean()
-        print(f"  shape={proc.shape}, foreground={fg_pct:.1f}%")
-
-        print_row(
-            "Run",
-            "maskel(s)",
-            "sk lee(s)",
-            "vv lee(s)",
-            "Spdup sk",
-            "Spdup vv",
+    with open(csv_path, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(
+            [
+                "sample",
+                "repeat",
+                "shape",
+                "foreground_px",
+                "foreground_pct",
+                "maskel_time_s",
+                "sk_lee_time_s",
+                "vv_lee_time_s",
+            ]
         )
-        print("-" * 85)
 
-        lee_times, sk_lee_times, vv_times = [], [], []
+        for proc, info in ds:
+            name = info["name"]
+            print(f"\n--- {name} ---")
 
-        for i in range(5):
-            t0 = time.perf_counter()
-            lee94_thin(proc)
-            lee_t = time.perf_counter() - t0
+            fg_px = int(np.count_nonzero(proc))
+            fg_pct = 100 * fg_px / proc.size
+            print(f"  shape={proc.shape}, foreground={fg_pct:.1f}%")
 
-            t0 = time.perf_counter()
-            skimage_thin(proc, method="lee")
-            sk_lee_t = time.perf_counter() - t0
+            print_row(
+                "Run",
+                "maskel(s)",
+                "sk lee(s)",
+                "vv lee(s)",
+                "Spdup sk",
+                "Spdup vv",
+            )
+            print("-" * 85)
 
-            vv_input = np.ascontiguousarray(np.pad(proc, 1).copy())
-            t0 = time.perf_counter()
-            vesselvio_lee94_thin(vv_input)
-            vv_t = time.perf_counter() - t0
+            lee_times, sk_lee_times, vv_times = [], [], []
 
-            lee_times.append(lee_t)
-            sk_lee_times.append(sk_lee_t)
-            vv_times.append(vv_t)
+            for i in range(5):
+                t0 = time.perf_counter()
+                lee94_thin(proc)
+                lee_t = time.perf_counter() - t0
 
-            speedup_sk = sk_lee_t / lee_t if lee_t > 0 else float("inf")
-            speedup_vv = vv_t / lee_t if lee_t > 0 else float("inf")
-            print_row(i, lee_t, sk_lee_t, vv_t, speedup_sk, speedup_vv)
+                t0 = time.perf_counter()
+                skimage_thin(proc, method="lee")
+                sk_lee_t = time.perf_counter() - t0
 
-        print("-" * 85)
+                vv_input = np.ascontiguousarray(np.pad(proc, 1).copy())
+                t0 = time.perf_counter()
+                vesselvio_lee94_thin(vv_input)
+                vv_t = time.perf_counter() - t0
 
-        lt = np.median(lee_times)
-        skt = np.median(sk_lee_times)
-        vvt = np.median(vv_times)
-        print_row("MEDIAN", lt, skt, vvt, skt / lt, vvt / lt)
+                lee_times.append(lee_t)
+                sk_lee_times.append(sk_lee_t)
+                vv_times.append(vv_t)
 
-        agg_lee.extend(lee_times)
-        agg_sk.extend(sk_lee_times)
-        agg_vv.extend(vv_times)
+                writer.writerow(
+                    [
+                        name,
+                        i,
+                        proc.shape,
+                        fg_px,
+                        round(fg_pct, 3),
+                        round(lee_t, 6),
+                        round(sk_lee_t, 6),
+                        round(vv_t, 6),
+                    ]
+                )
+
+                speedup_sk = sk_lee_t / lee_t if lee_t > 0 else float("inf")
+                speedup_vv = vv_t / lee_t if lee_t > 0 else float("inf")
+                print_row(i, lee_t, sk_lee_t, vv_t, speedup_sk, speedup_vv)
+
+            print("-" * 85)
+
+            lt = np.median(lee_times)
+            skt = np.median(sk_lee_times)
+            vvt = np.median(vv_times)
+            print_row("MEDIAN", lt, skt, vvt, skt / lt, vvt / lt)
+
+            agg_lee.extend(lee_times)
+            agg_sk.extend(sk_lee_times)
+            agg_vv.extend(vv_times)
+
+    print(f"\nWrote {csv_path}")
 
     print("\n" + "=" * 95)
     print("  AGGREGATE (all runs, all scans)")
