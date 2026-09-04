@@ -137,22 +137,13 @@ def compute_speedups(
     }
 
 
-def build_rows(
-    name: str, methods: list[str], *value_lists, dataset_cols: list[str] = ()
-) -> list[str]:
+def build_rows(name: str, methods: list[str], *value_lists) -> list[str]:
     """*value_lists: one or more ({method: [values...]}, fmt_fn) pairs, each
-    becoming one per-method formatted column. dataset_cols: already-formatted
-    strings describing the dataset itself rather than any one method (e.g. image
-    dimensions, foreground pixel count) - multirow-merged across the dataset's
-    method rows exactly like `name` is, since they're the same for every method."""
+    becoming one per-method formatted column."""
     n = len(methods)
     lines = []
     for i, m in enumerate(methods):
-        if i == 0:
-            merged = [f"\\multirow{{{n}}}{{*}}{{{name}}}"]
-            merged += [f"\\multirow{{{n}}}{{*}}{{{c}}}" for c in dataset_cols]
-        else:
-            merged = [""] * (1 + len(dataset_cols))
+        merged = [f"\\multirow{{{n}}}{{*}}{{{name}}}"] if i == 0 else [""]
         cols = " & ".join(fmt_fn(values[m]) for values, fmt_fn in value_lists)
         lines.append(" & ".join([*merged, METHOD_LABELS[m], cols]) + r" \\")
     return lines

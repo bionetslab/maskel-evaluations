@@ -18,6 +18,17 @@ import sys
 import time
 from pathlib import Path
 
+# Pin the incidental single-threaded-baseline libraries before numpy/scipy
+# import - purely for run-to-run reproducibility, since scikit-image's
+# skeletonize doesn't call into BLAS for its own work anyway. NUMBA_NUM_THREADS
+# is deliberately left alone (setdefault, not assignment): the caller (a Slurm
+# job script, typically) is expected to pin it explicitly to the node's
+# physical core count, since numba is what maskel and VesselVio both actually
+# parallelize through - see the printed value in main() for whatever's in
+# effect for a given run.
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+
 import numpy as np
 from skimage.morphology import skeletonize as skimage_thin
 
@@ -50,6 +61,12 @@ def warmup():
     small[2:8, 2:8, 2:8] = 1
     lee94_thin(small)
 
+    # VesselVio's lee94.py is @njit(cache=True) too - without warming it up
+    # here the same way, it would pay first-call compile/cache-load time
+    # inside every sample's timed vesselvio_lee94_thin() call below, an
+    # asymmetry maskel never pays.
+    vesselvio_lee94_thin(np.ascontiguousarray(np.pad(small, 1)))
+
 
 def print_row(name, lee_t, sk_lee_t, vv_t, speedup_sk=None, speedup_vv=None):
     if speedup_sk is None and speedup_vv is None:
@@ -67,9 +84,12 @@ def print_row(name, lee_t, sk_lee_t, vv_t, speedup_sk=None, speedup_vv=None):
 
 
 def main():
+    import numba
+
     print("=" * 95)
     print("  VESSEL12 Lung Benchmark: maskel vs skimage vs VesselVio")
     print("  No preprocessing (raw binarized scan) - thinning implementations only")
+    print(f"  NUMBA_NUM_THREADS in effect: {numba.get_num_threads()}")
     print("=" * 95)
     print()
 

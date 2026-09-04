@@ -29,6 +29,13 @@ cd "${SLURM_SUBMIT_DIR}"
 export PATH="${HOME}/.local/bin:${PATH}"
 export VESSELVIO_PATH="${VESSELVIO_PATH:-$(cd "${SLURM_SUBMIT_DIR}/.." && pwd)/VesselVio}"
 
+# tinyfat nodes are 2x AMD EPYC 7502 = 64 physical cores/128 SMT threads; pin
+# numba explicitly to the physical core count rather than letting it default
+# to every visible thread (SMT siblings mostly add cache contention for this
+# kind of CPU-bound kernel, not real throughput). maskel and VesselVio both
+# parallelize through numba; scikit-image doesn't use it at all.
+export NUMBA_NUM_THREADS=64
+
 # tinyfat compute nodes have no direct internet egress (unlike the login node) --
 # harmless here since the masks are expected to already be present, but kept for
 # parity with run_benchmarks.sbatch in case this ever needs to fetch them itself.

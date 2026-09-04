@@ -46,6 +46,18 @@ import threading
 import time
 from pathlib import Path
 
+# Pin the incidental single-threaded-baseline libraries before numpy/scipy
+# import (and therefore before any BLAS gets a chance to spin up its own
+# thread pool) - purely for run-to-run reproducibility, since scikit-image's
+# skeletonize doesn't call into BLAS for its own work anyway. NUMBA_NUM_THREADS
+# is deliberately left alone here (setdefault, not assignment): the caller
+# (a Slurm job script, typically) is expected to pin it explicitly to the
+# node's physical core count, since numba is what maskel and VesselVio both
+# actually parallelize through - this worker only reports whatever value
+# is in effect (see main()), not force one.
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+
 import numpy as np
 
 _HERE = Path(__file__).resolve().parent
@@ -137,6 +149,15 @@ def _run_vesselvio(vol: np.ndarray) -> tuple[int, int, float]:
         skimage.morphology.skeletonize_3d = skimage.morphology.skeletonize
     from library.lee94 import skeletonize as vesselvio_lee94_thin
 
+    # numba JIT warmup, excluded from the measured call - VesselVio's own
+    # lee94.py is @njit(cache=True) throughout, same as maskel's, so without
+    # this it pays first-call compile/cache-load time inside the timed
+    # window on every single (sample, method) subprocess, while maskel's
+    # equivalent overhead is always excluded by its own warmup above.
+    small = np.zeros((10, 10, 10), dtype=np.uint8)
+    small[2:8, 2:8, 2:8] = 1
+    vesselvio_lee94_thin(np.ascontiguousarray(np.pad(small, 1)))
+
     baseline_kb = _vmrss_kb()
     padded = vol if vol.ndim == 3 else vol[np.newaxis, ...]
     with _PeakRssSampler() as sampler:
@@ -161,6 +182,13 @@ def main():
         "--method", required=True, choices=["maskel", "sk_zhang", "sk_lee", "vv_lee"]
     )
     args = parser.parse_args()
+
+    import numba
+
+    print(
+        f"NUMBA_NUM_THREADS in effect: {numba.get_num_threads()}",
+        file=sys.stderr,
+    )
 
     vol = np.load(args.array_path)
 
