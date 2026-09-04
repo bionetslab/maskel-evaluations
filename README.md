@@ -1,4 +1,5 @@
 # maskel-evaluations
+Simon Wittmann, Anna Möller
 
 Benchmarks and analysis notebooks for [maskel](https://github.com/bionetslab/maskel/), the vessel skeletonization and phenotype feature extraction package. Not a published package itself — this repo just consumes `maskel` from PyPI. See also [napari-maskel](https://github.com/bionetslab/napari-maskel/), the interactive napari plugin built on the same package.
 
