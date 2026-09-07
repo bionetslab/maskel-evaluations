@@ -4,7 +4,7 @@
 #SBATCH --partition=work
 #SBATCH --exclusive
 #SBATCH --nodes=1
-#SBATCH --time=05:00:00
+#SBATCH --time=03:00:00
 #SBATCH --output=slurm/logs/%x_%j.out
 #SBATCH --error=slurm/logs/%x_%j.err
 #
@@ -13,9 +13,9 @@
 # Wall-clock timing comparison (maskel vs skimage vs VesselVio) on the VESSEL12 lung
 # scans: 20 scans x 5 repeats x 3 methods. Exclusive node access is deliberate: these
 # are timing comparisons, and a shared node would let other jobs skew the numbers via
-# CPU contention. Time budget is generous -- a 2-scan/1-repeat smoke test measured
-# ~236s of thinning time per scan-repeat, so 20 scans x 5 repeats extrapolates to
-# roughly 3.5h; this leaves headroom for slower nodes/contention.
+# CPU contention. The committed results/3d_lung_runtime.csv totals ~2.35h of measured
+# thinning time across all 100 rows; the budget above leaves headroom for slower
+# nodes/contention on top of that.
 #
 # Requires beforehand:
 #   - a VesselVio checkout, path set via VESSELVIO_PATH below or in the env
@@ -31,6 +31,13 @@ cd "${SLURM_SUBMIT_DIR}"
 
 export PATH="${HOME}/.local/bin:${PATH}"
 export VESSELVIO_PATH="${VESSELVIO_PATH:-$(cd "${SLURM_SUBMIT_DIR}/.." && pwd)/VesselVio}"
+
+# tinyfat nodes are 2x AMD EPYC 7502 = 64 physical cores/128 SMT threads; pin
+# numba explicitly to the physical core count rather than letting it default
+# to every visible thread (SMT siblings mostly add cache contention for this
+# kind of CPU-bound kernel, not real throughput). maskel and VesselVio both
+# parallelize through numba; scikit-image doesn't use it at all.
+export NUMBA_NUM_THREADS=64
 export http_proxy="${http_proxy:-http://proxy.nhr.fau.de:80}"
 export https_proxy="${https_proxy:-http://proxy.nhr.fau.de:80}"
 

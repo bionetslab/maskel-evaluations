@@ -9,8 +9,6 @@ Benchmarks and analysis notebooks for [maskel](https://github.com/bionetslab/mas
 uv sync --extra notebooks
 ```
 
-Before `maskel` has its first PyPI release, point uv at a local checkout instead: `uv sync && uv pip install -e ../maskel` (adjust the path), or add a local, untracked `uv.toml` with a `[tool.uv.sources]` override for `maskel`.
-
 ## Datasets
 
 Benchmarks here run against two public vessel-segmentation datasets, neither of which is checked into this repo (see `.gitignore`). Both are auto-downloaded into `data/` on first use — nothing to set up manually to just run the benchmarks.
@@ -40,7 +38,7 @@ The VesselVio comparisons need a local [VesselVio](https://github.com/JacobBumga
 
 Every benchmark writes its results to a CSV in `results/`: `2d_HRF_runtime.csv`, `2d_HRF_memory.csv`, `3d_lung_runtime.csv`, `3d_lung_memory.csv`. `benchmark/paper_table.py` reads all four and writes `results/runtime_table.tex` and `results/memory_table.tex`. These committed CSVs and `.tex` tables in `results/` are the actual numbers reported in the paper, not just example output.
 
-The HRF benchmarks finish in minutes; the VESSEL12 ones do not — the timing comparison (20 scans x 5 repeats x 3 methods) took ~2.5h on a 128-core exclusive node. `slurm/*.sbatch` are the job scripts used to actually produce the committed `results/`; submit them on an HPC cluster (`sbatch slurm/run_3d_lung_comparison_benchmark.sbatch`, etc.) rather than running the VESSEL12 scripts interactively.
+The HRF benchmarks finish in minutes; the VESSEL12 ones do not — the timing comparison (20 scans x 5 repeats x 3 methods) took ~2.5h on a 64-core (128-thread) exclusive node. `slurm/*.sbatch` are the job scripts used to actually produce the committed `results/`; submit them on an HPC cluster (`sbatch slurm/run_3d_lung_comparison_benchmark.sbatch`, etc.) rather than running the VESSEL12 scripts interactively.
 
 ## Analysis notebooks
 

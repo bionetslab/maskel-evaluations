@@ -9,9 +9,7 @@ dependencies = [
     "numpy>=2.4.4",
     "pillow>=12.2.0",
     "scipy>=1.17.1",
-    "skan>=0.13.1",
     "scikit-image>=0.26.0",
-    "tifffile",
     "nibabel>=5.0.0",  # VesselVio's library/lee94.py imports this at module level
 ]
 
