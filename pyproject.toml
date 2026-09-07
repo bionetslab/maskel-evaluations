@@ -2,9 +2,9 @@
 name = "maskel-evaluations"
 version = "0.1.0"
 description = "Benchmarks and analysis notebooks for maskel"
-requires-python = ">=3.13"
+requires-python = ">=3.14"
 dependencies = [
-    "maskel>=1.1.3,<2",
+    "maskel>=2.0.0,<3",
     "itk>=5.4.6",
     "numpy>=2.4.4",
     "pillow>=12.2.0",
